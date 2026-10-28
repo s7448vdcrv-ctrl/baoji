@@ -2,24 +2,36 @@ name: baoji
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/10 4-13 * * *'
-    - cron: '0 14 * * *'
+    - cron: '0 4 * * *'
+    - cron: '0 9 * * *'
 permissions:
   contents: write
+concurrency:
+  group: baoji
+  cancel-in-progress: false
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 330
     steps:
       - uses: actions/checkout@v4
-      - name: Query and push
+      - name: Loop query until 22:00 CST (max 5h)
         env:
           ACCOUNTS: ${{ secrets.ACCOUNTS }}
           BARK_KEY: ${{ secrets.BARK_KEY }}
-        run: bash baoji.sh
+        run: |
+          START=$(date +%s)
+          while : ; do
+            BJ=$(TZ=Asia/Shanghai date +%H%M)
+            [ "$BJ" -ge 2200 ] && break
+            [ $(( $(date +%s) - START )) -ge 18000 ] && break
+            bash baoji.sh || true
+            sleep 600
+          done
       - name: Save state
         run: |
           git config user.name "bot"
           git config user.email "bot@users.noreply.github.com"
           git add -A
           git diff --cached --quiet || git commit -m "state update"
-          git push
+          git push || (git pull --rebase && git push) || true
